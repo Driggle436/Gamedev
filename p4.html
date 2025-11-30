@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Simple Chess Engine</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      text-align: center;
+      background-color: burlywood;
+    }
+    #chessboard {
+      display: grid;
+      grid-template-columns: repeat(8, 60px);
+      grid-template-rows: repeat(8, 60px);
+      width: 480px;
+      height: 480px;
+      margin: 20px auto;
+      border: 2px solid #333;
+    }
+    .square {
+      width: 60px;
+      height: 60px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 36px;
+      cursor: pointer;
+    }
+    .light { background-color: #f0d9b5; }
+    .dark { background-color: #086607; }
+    .selected { outline: 3px solid red; }
+  </style>
+</head>
+<body>
+  <h1>Chess Game</h1>
+  <div id="chessboard"></div>
+  <h2>Scoreboard</h2>
+<p>White: <span id="whiteScore">0</span> | Black: <span id="blackScore">0</span></p>
+
+  
+  <button onclick="resetScores()">Reset Scores</button>
+  <script>
+const pieces = {
+  r: "♜", n: "♞", b: "♝", q: "♛", k: "♚", p: "♟",
+  R: "♖", N: "♘", B: "♗", Q: "♕", K: "♔", P: "♙"
+};
+
+let gameBoard = [
+  ["r","n","b","q","k","b","n","r"],
+  ["p","p","p","p","p","p","p","p"],
+  [".",".",".",".",".",".",".","."],
+  [".",".",".",".",".",".",".","."],
+  [".",".",".",".",".",".",".","."],
+  [".",".",".",".",".",".",".","."],
+  ["P","P","P","P","P","P","P","P"],
+  ["R","N","B","Q","K","B","N","R"]
+];
+
+const board = document.getElementById("chessboard");
+let selected = null;
+let isPlayerTurn = true;
+let whiteScore = 0;
+let blackScore = 0;
+
+function drawBoard() {
+  board.innerHTML = "";
+  for (let row = 0; row < 8; row++) {
+    for (let col = 0; col < 8; col++) {
+      const square = document.createElement("div");
+      square.classList.add("square");
+      square.classList.add((row + col) % 2 === 0 ? "light" : "dark");
+      square.dataset.row = row;
+      square.dataset.col = col;
+      const piece = gameBoard[row][col];
+      if (piece !== ".") square.textContent = pieces[piece];
+      square.addEventListener("click", () => handleClick(row, col));
+      board.appendChild(square);
+    }
+  }
+}
+
+function handleClick(row, col) {
+  if (!isPlayerTurn) return;
+  const piece = gameBoard[row][col];
+  if (selected) {
+    if (isValidMove(selected, {row, col})) {
+      movePiece(selected, {row, col});
+      selected = null;
+      isPlayerTurn = false;
+      drawBoard();
+      if (isInCheck(gameBoard, false)) {
+  if (!hasAnyValidMoves(gameBoard, false)) {
+    alert("Checkmate! White wins!");
+    whiteScore++;
+    resetGame();
+    return;
+  } else {
+    alert("Black is in Check!");
+  }
+}
+      setTimeout(() => {
+        aiMove();
+        isPlayerTurn = true;
+        drawBoard();
+      }, 300);
+    } else {
+      selected = null;
+      drawBoard();
+    }
+  } else if (piece !== "." && piece === piece.toUpperCase()) {
+    selected = {row, col};
+    highlightSelected();
+  }
+}
+
+function highlightSelected() {
+  drawBoard();
+  const squares = document.querySelectorAll(".square");
+  squares.forEach(sq => {
+    if (parseInt(sq.dataset.row) === selected.row && parseInt(sq.dataset.col) === selected.col) {
+      sq.classList.add("selected");
+    }
+  });
+}
+
+function movePiece(from, to) {
+  gameBoard[to.row][to.col] = gameBoard[from.row][from.col];
+  gameBoard[from.row][from.col] = ".";
+}
+
+function isSameSide(p1, p2) {
+  return (p1 === p1.toUpperCase()) === (p2 === p2.toUpperCase());
+}
+
+function isValidMove(from, to) {
+  const src = gameBoard[from.row][from.col];
+  const dst = gameBoard[to.row][to.col];
+  if (src === "." || (dst !== "." && isSameSide(src, dst))) return false;
+  const dr = to.row - from.row;
+  const dc = to.col - from.col;
+  switch (src.toLowerCase()) {
+    case 'p': return validPawnMove(src, from, to, dr, dc, dst);
+    case 'r': return validRookMove(from, to);
+    case 'n': return validKnightMove(dr, dc);
+    case 'b': return validBishopMove(from, to);
+    case 'q': return validQueenMove(from, to);
+    case 'k': return Math.abs(dr) <= 1 && Math.abs(dc) <= 1;
+    default: return false;
+  }
+}
+
+function validPawnMove(piece, from, to, dr, dc, dst) {
+  let dir = piece === 'P' ? -1 : 1;
+  if (dc === 0 && dst === ".") {
+    if (dr === dir) return true;
+    if ((from.row === 6 && piece === 'P' && dr === -2) || (from.row === 1 && piece === 'p' && dr === 2)) {
+      return gameBoard[from.row + dir][from.col] === ".";
+    }
+  }
+  if (Math.abs(dc) === 1 && dr === dir && dst !== "." && !isSameSide(piece, dst)) return true;
+  return false;
+}
+
+function validRookMove(from, to) {
+  if (from.row !== to.row && from.col !== to.col) return false;
+  return clearPath(from, to);
+}
+
+function validBishopMove(from, to) {
+  if (Math.abs(from.row - to.row) !== Math.abs(from.col - to.col)) return false;
+  return clearPath(from, to);
+}
+
+function validQueenMove(from, to) {
+  return validRookMove(from, to) || validBishopMove(from, to);
+}
+
+function validKnightMove(dr, dc) {
+  return (Math.abs(dr) === 2 && Math.abs(dc) === 1) || (Math.abs(dr) === 1 && Math.abs(dc) === 2);
+}
+
+function clearPath(from, to) {
+  let dr = Math.sign(to.row - from.row);
+  let dc = Math.sign(to.col - from.col);
+  let r = from.row + dr, c = from.col + dc;
+  while (r !== to.row || c !== to.col) {
+    if (gameBoard[r][c] !== ".") return false;
+    r += dr; c += dc;
+  }
+  return true;
+}
+
+function cloneBoard(board) {
+  return board.map(row => row.slice());
+}
+
+class GameTreeNode {
+  constructor(board, move = null, isMaximizing = true) {
+    this.board = board;
+    this.move = move;
+    this.isMaximizing = isMaximizing;
+    this.children = [];
+    this.value = null;
+  }
+
+  expand() {
+    const currentPlayer = this.isMaximizing ? 'A' : 'a';
+    for (let row = 0; row < 8; row++) {
+      for (let col = 0; col < 8; col++) {
+        const piece = this.board[row][col];
+        if ((this.isMaximizing && piece >= 'A' && piece <= 'Z') || 
+            (!this.isMaximizing && piece >= 'a' && piece <= 'z')) {
+          const moves = [];
+          for (let r = 0; r < 8; r++) {
+            for (let c = 0; c < 8; c++) {
+              if (isValidMoveBoard(piece, {row, col}, {row: r, col: c}, this.board)) {
+                moves.push({row: r, col: c});
+              }
+            }
+          }
+          for (let move of moves) {
+            const newBoard = cloneBoard(this.board);
+            newBoard[move.row][move.col] = piece;
+            newBoard[row][col] = ".";
+            this.children.push(new GameTreeNode(newBoard, {from: {row, col}, to: move}, !this.isMaximizing));
+          }
+        }
+      }
+    }
+  }
+}
+
+function isValidMoveBoard(piece, from, to, board) {
+  const original = gameBoard;
+  gameBoard = board;
+  const valid = isValidMove(from, to);
+  gameBoard = original;
+  return valid;
+}
+
+function minimaxNode(node, depth) {
+  if (depth === 0) {
+    node.value = evaluateBoard(node.board);
+    return node.value;
+  }
+
+  if (node.children.length === 0) {
+    node.expand();
+    if (node.children.length === 0) {
+      node.value = evaluateBoard(node.board);
+      return node.value;
+    }
+  }
+
+  if (node.isMaximizing) {
+    let maxEval = -Infinity;
+    for (const child of node.children) {
+      const eval = minimaxNode(child, depth - 1);
+      maxEval = Math.max(maxEval, eval);
+    }
+    node.value = maxEval;
+    return maxEval;
+  } else {
+    let minEval = Infinity;
+    for (const child of node.children) {
+      const eval = minimaxNode(child, depth - 1);
+      minEval = Math.min(minEval, eval);
+    }
+    node.value = minEval;
+    return minEval;
+  }
+}
+
+function evaluateBoard(boardState) {
+  let score = 0;
+  const values = {p: -1, r: -5, n: -3, b: -3, q: -9, k: -900, P: 1, R: 5, N: 3, B: 3, Q: 9, K: 900};
+  for (let row of boardState) {
+    for (let piece of row) {
+      if (piece !== ".") score += values[piece] || 0;
+    }
+  }
+  return score;
+}
+
+function findKing(board, isWhite) {
+  const target = isWhite ? "K" : "k";
+  for (let row = 0; row < 8; row++) {
+    for (let col = 0; col < 8; col++) {
+      if (board[row][col] === target) return {row, col};
+    }
+  }
+  return null;
+}
+
+function isInCheck(board, isWhite) {
+  const kingPos = findKing(board, isWhite);
+  if (!kingPos) return true;  // King captured
+  for (let row = 0; row < 8; row++) {
+    for (let col = 0; col < 8; col++) {
+      const piece = board[row][col];
+      if (piece !== "." && (isWhite ? piece === piece.toLowerCase() : piece === piece.toUpperCase())) {
+        if (isValidMoveBoard(piece, {row, col}, kingPos, board)) {
+          return true;
+        }
+      }
+    }
+  }
+  return false;
+}
+
+function hasAnyValidMoves(board, isWhite) {
+  for (let row = 0; row < 8; row++) {
+    for (let col = 0; col < 8; col++) {
+      const piece = board[row][col];
+      if (piece !== "." && (isWhite ? piece === piece.toUpperCase() : piece === piece.toLowerCase())) {
+        for (let r = 0; r < 8; r++) {
+          for (let c = 0; c < 8; c++) {
+            if (isValidMoveBoard(piece, {row, col}, {row: r, col: c}, board)) {
+              const newBoard = cloneBoard(board);
+              newBoard[r][c] = piece;
+              newBoard[row][col] = ".";
+              if (!isInCheck(newBoard, isWhite)) return true;
+            }
+          }
+        }
+      }
+    }
+  }
+  return false;
+}
+
+function aiMove() {
+  const root = new GameTreeNode(cloneBoard(gameBoard), null, false);  // AI is minimizing
+  root.expand();
+
+  minimaxNode(root, 2);
+
+  let bestChild = null;
+  let bestValue = Infinity;
+
+  for (const child of root.children) {
+    if (child.value < bestValue) {
+      bestValue = child.value;
+      bestChild = child;
+    }
+  }
+
+  if (bestChild && bestChild.move) {
+    movePiece(bestChild.move.from, bestChild.move.to);
+
+    if (isInCheck(gameBoard, true)) {
+  if (!hasAnyValidMoves(gameBoard, true)) {
+    alert("Checkmate! Black wins!");
+    blackScore++;
+    resetGame();
+  } else {
+    alert("White is in Check!");
+  }
+}
+ }
+}
+
+drawBoard();
+function resetGame() {
+  gameBoard = [
+    ["r","n","b","q","k","b","n","r"],
+    ["p","p","p","p","p","p","p","p"],
+    [".",".",".",".",".",".",".","."],
+    [".",".",".",".",".",".",".","."],
+    [".",".",".",".",".",".",".","."],
+    [".",".",".",".",".",".",".","."],
+    ["P","P","P","P","P","P","P","P"],
+    ["R","N","B","Q","K","B","N","R"]
+  ];
+  isPlayerTurn = true;
+  selected = null;
+  drawBoard();
+  updateScoreboard();
+}
+function updateScoreboard() {
+  document.getElementById("whiteScore").textContent = whiteScore;
+  document.getElementById("blackScore").textContent = blackScore;
+}
+
+function resetScores() {
+  whiteScore = 0;
+  blackScore = 0;
+  updateScoreboard();
+}
+  </script>
+</body>
+</html>
